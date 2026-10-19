@@ -51,7 +51,8 @@ async function loadLibrary(){try{const all=await dbAll();for(const r of all){sta
 
 /* ---------------- deck ---------------- */
 class Deck{constructor(id){this.id=id;this.track=null;this.buf=null;this.src=null;this.playing=false;this.startCtx=0;this.startPos=0;this.tempo=0;this.bend=0;this.cuePoint=0;this.loop=null;
- this.keyLock=localStorage.getItem('mx_keylock_'+id)!=='0';this.st=null;this.stBuf=null;// key-lock (WSOLA worklet) state
+ this.keyLock=localStorage.getItem('mx_keylock_'+id)!=='0';this.st=null;this.stBuf=null;this.stSeq=0;this._wpos=null;// key-lock (phase-vocoder worklet) state
+ this.leader=null;this.nudge=0;// sync: deck we follow + small continuous tempo nudge for phase lock
  this.trim=ctx.createGain();this.low=ctx.createBiquadFilter();this.low.type='lowshelf';this.low.frequency.value=250;
  this.mid=ctx.createBiquadFilter();this.mid.type='peaking';this.mid.frequency.value=1100;this.mid.Q.value=.8;
  this.high=ctx.createBiquadFilter();this.high.type='highshelf';this.high.frequency.value=3500;
@@ -59,23 +60,29 @@ class Deck{constructor(id){this.id=id;this.track=null;this.buf=null;this.src=nul
  this.fx=makeFX();this.vol=ctx.createGain();this.vol.gain.value=.9;this.xf=ctx.createGain();this.an=ctx.createAnalyser();this.an.fftSize=1024;
  this.trim.connect(this.low);this.low.connect(this.mid);this.mid.connect(this.high);this.high.connect(this.filt);this.filt.connect(this.fx.inp);this.fx.out.connect(this.vol);this.vol.connect(this.xf);this.xf.connect(this.an);this.an.connect(musicBus);
  this.eq={low:0,mid:0,high:0};this.kills={low:false,mid:false,high:false}}
- get rate(){return (1+this.tempo)*(1+this.bend)}
+ get baseRate(){return (1+this.tempo)*(1+this.bend)}
+ get rate(){return this.baseRate*(1+this.nudge)}
  get stOn(){return this.keyLock&&!!this.st&&this.stBuf===this.buf}
  sendBuf(){if(!this.st||!this.buf||this.stBuf===this.buf)return;const ch=[];for(let c=0;c<Math.min(2,this.buf.numberOfChannels);c++)ch.push(this.buf.getChannelData(c).slice());
   this.st.port.postMessage({type:'load',ch},ch.map(a=>a.buffer));this.stBuf=this.buf}
  stMsg(m){if(this.src&&this.src.st)this.st.port.postMessage({...m,id:this.src.id})}
- _srcLoop(){if(!this.src)return;const l=this.loop;if(this.src.st)this.stMsg({type:'loop',loop:l&&{s:l.s,e:l.e}});else{this.src.loop=!!l;if(l){this.src.loopStart=l.s;this.src.loopEnd=l.e}}}
+ stAnchor(){const l=this.loop;this._wpos=null;return{seq:++this.stSeq,pos:this.startPos,at:this.startCtx,rate:this.rate,loop:l&&{s:l.s,e:l.e}}}
+ stState(){if(this.src&&this.src.st)this.stMsg({type:'state',...this.stAnchor()})}// tell the worklet our position timeline
+ _srcLoop(){if(!this.src)return;const l=this.loop;if(this.src.st)this.stState();else{this.src.loop=!!l;if(l){this.src.loopStart=l.s;this.src.loopEnd=l.e}}}
  setKeyLock(on){this.keyLock=on;try{localStorage.setItem('mx_keylock_'+this.id,on?'1':'0')}catch(e){}if(on)this.sendBuf();const was=this.playing;if(was){this.stop();this.play()}ui[this.id].refresh();
   status(`Deck ${this.id}: key lock ${on?(this.st?'ON – tempo changes keep the original pitch':'unavailable in this browser'):'OFF – tempo changes shift pitch like vinyl'}`)}
- get bpm(){return this.track?this.track.a.bpm*this.rate:0}
+ get bpm(){return this.track?this.track.a.bpm*this.baseRate:0}
  get beatLen(){return this.track?60/this.track.a.bpm:.5}
  pos(){if(!this.playing)return this.startPos;let p=this.startPos+(ctx.currentTime-this.startCtx)*this.rate;
   if(this.loop&&this.startPos<=this.loop.e+0.01&&p>this.loop.e){const L=this.loop.e-this.loop.s;p=this.loop.s+((p-this.loop.s)%L)}return Math.min(p,this.buf?this.buf.duration:0)}
+ // actual playback position as reported by the worklet (source pos at an AudioContext time), extrapolated to now
+ truePos(){const w=this._wpos;if(!this.playing||!this.src||!this.src.st||!w||w.id!==this.src.id||w.seq!==this.stSeq)return this.pos();
+  let p=w.pos+(ctx.currentTime-w.t)*this.rate;if(this.loop&&this.startPos<=this.loop.e+0.01&&p>this.loop.e){const L=this.loop.e-this.loop.s;p=this.loop.s+((p-this.loop.s)%L)}return Math.min(p,this.buf?this.buf.duration:0)}
  rebase(){this.startPos=this.pos();this.startCtx=ctx.currentTime}
- async load(t){this.stop();status(`Loading ${t.name} → Deck ${this.id}`);this.buf=await decode(t);this.track=t;this.sendBuf();this.startPos=0;this.cuePoint=t.a.entry||0;this.loop=null;this.tempo=0;this.bend=0;ui[this.id].refresh();renderLib();status(`Deck ${this.id}: ${t.name} · ${t.a.bpm} BPM · ${t.a.key}`)}
+ async load(t){this.stop();status(`Loading ${t.name} → Deck ${this.id}`);this.buf=await decode(t);this.track=t;this.sendBuf();this.leader=null;this.nudge=0;decks.forEach(d=>{if(d.leader===this){d.leader=null;d.nudge=0}});this.startPos=0;this.cuePoint=t.a.entry||0;this.loop=null;this.tempo=0;this.bend=0;ui[this.id].refresh();renderLib();status(`Deck ${this.id}: ${t.name} · ${t.a.bpm} BPM · ${t.a.key}`)}
  play(){if(!this.buf||this.playing)return;resume();const off=clamp(this.startPos,0,this.buf.duration-0.01);
   if(this.stOn){// key lock: time-stretched playback in the worklet (pitch stays put)
-   const v={st:true,id:++voiceSeq};this.st.port.postMessage({type:'play',id:v.id,pos:off,rate:this.rate,loop:this.loop&&{s:this.loop.s,e:this.loop.e}});this.src=v}
+   const v={st:true,id:++voiceSeq};this.startPos=off;this.startCtx=ctx.currentTime;this.st.port.postMessage({type:'play',id:v.id,...this.stAnchor()});this.src=v}
   else{const s=ctx.createBufferSource();s.buffer=this.buf;s.playbackRate.value=this.rate;
    if(this.loop){s.loop=true;s.loopStart=this.loop.s;s.loopEnd=this.loop.e}
    s.connect(this.trim);s.start(0,off);this.src=s;
@@ -87,29 +94,39 @@ class Deck{constructor(id){this.id=id;this.track=null;this.buf=null;this.src=nul
  seek(t){if(!this.buf)return;t=clamp(t,0,this.buf.duration-0.05);const was=this.playing;if(was)this.stop();this.startPos=t;if(this.loop&&(t<this.loop.s||t>this.loop.e))this.loop=null;if(was)this.play();ui[this.id].refresh()}
  cue(){// CDJ style: if playing -> jump to cue & stop; if stopped -> set cue at current pos
   if(this.playing){this.stop();this.seek(this.cuePoint)}else{this.cuePoint=this.startPos;}ui[this.id].refresh()}
- setRate(){if(this.src){this.rebase();if(this.src.st)this.stMsg({type:'rate',rate:this.rate});else this.src.playbackRate.setTargetAtTime(this.rate,ctx.currentTime,.01)}}
+ setRate(){if(this.src){this.rebase();if(this.src.st)this.stState();else this.src.playbackRate.setValueAtTime(this.rate,ctx.currentTime)}}
  setTempo(v){this.tempo=v;this.setRate();ui[this.id].refresh(true)}
  setLoop(beats){if(!this.buf)return;if(!beats){this.exitLoop();return}const p=this.pos();const bl=this.beatLen,o=this.track.a.offset;
   const s=o+Math.floor((p-o)/bl)*bl;this.loop={s:Math.max(0,s),e:Math.min(this.buf.duration,s+beats*bl),beats};if(this.src){this._srcLoop();if(p>this.loop.e)this.seek(this.loop.s)}ui[this.id].refresh()}
- exitLoop(){if(!this.loop)return;const p=this.pos();this.loop=null;if(this.src){this._srcLoop();this.rebase();this.startPos=p}ui[this.id].refresh()}
+ exitLoop(){if(!this.loop)return;const p=this.pos();this.loop=null;if(this.src){this.startPos=p;this.startCtx=ctx.currentTime;this._srcLoop()}ui[this.id].refresh()}
  hotCue(i,clear){if(!this.track)return;if(clear){this.track.cues[i]=null;saveTrack(this.track)}else if(this.track.cues[i]==null){this.track.cues[i]=this.pos();saveTrack(this.track)}else{this.seek(this.track.cues[i]);if(!this.playing)this.play()}ui[this.id].refresh()}
  setEQ(band,db){this.eq[band]=db;this.applyEQ()}
  applyEQ(){for(const b of['low','mid','high']){const n=this[b];const v=this.kills[b]?-40:this.eq[b];n.gain.setTargetAtTime(v,ctx.currentTime,.02)}}
  setFilter(v){// -1..1 : left = low-pass, right = high-pass
   const f=this.filt,t=ctx.currentTime;if(Math.abs(v)<.03){f.type='lowpass';f.frequency.setTargetAtTime(22000,t,.02);f.Q.value=.7}
   else if(v<0){f.type='lowpass';f.frequency.setTargetAtTime(200*Math.pow(110,1+v),t,.02);f.Q.value=4}else{f.type='highpass';f.frequency.setTargetAtTime(20*Math.pow(300,v),t,.02);f.Q.value=4}}
- phase(){return this.track?(((this.pos()-this.track.a.offset)/this.beatLen)%1+1)%1:0}
- sync(other){if(!this.track||!other||!other.track)return false;let target=other.bpm/this.track.a.bpm-1;
-  if(target>.5)target=other.bpm/2/this.track.a.bpm-1;if(target<-.33)target=other.bpm*2/this.track.a.bpm-1;
-  this.tempo=clamp(target,-.5,.5);this.setRate();if(other.playing&&this.playing)this.alignPhase(other);ui[this.id].refresh(true);return true}
- alignPhase(other){let d=other.phase()-this.phase();if(d>.5)d-=1;if(d<-.5)d+=1;this.seek(this.pos()+d*this.beatLen+0.0)}
+ phase(){return this.track?(((this.truePos()-this.track.a.offset)/this.beatLen)%1+1)%1:0}
+ syncTarget(other){let target=other.bpm/this.track.a.bpm-1;
+  if(target>.5)target=other.bpm/2/this.track.a.bpm-1;if(target<-.33)target=other.bpm*2/this.track.a.bpm-1;return clamp(target,-.5,.5)}
+ sync(other){if(!this.track||!other||!other.track)return false;this.leader=other;if(other.leader===this){other.leader=null;other.nudge=0;other.setRate()}
+  this.nudge=0;this.tempo=this.syncTarget(other);this.setRate();if(other.playing&&this.playing)this.alignPhase(other);ui[this.id].refresh();ui[other.id].refresh();return true}
+ phaseErr(other){let d=this.phase()-other.phase();if(d>.5)d-=1;if(d<-.5)d+=1;return d*this.beatLen/this.rate}// seconds, + = we're ahead
+ alignPhase(other){let d=other.phase()-this.phase();if(d>.5)d-=1;if(d<-.5)d+=1;this.seek(this.truePos()+d*this.beatLen)}
 }
 let voiceSeq=0;
 const decks=[new Deck('A'),new Deck('B')];const D={A:decks[0],B:decks[1]};const other=d=>d===decks[0]?decks[1]:decks[0];
-/* key lock: load the WSOLA time-stretch worklet; decks fall back to plain varispeed if it can't load (e.g. file://) */
+/* phase lock: a synced deck follows its leader's tempo and gets a small, gradual tempo nudge so the beats stay locked */
+const LOCK={tau:.35,maxKeyLock:.01,maxVinyl:.004,realign:.04};
+function phaseLock(){for(const d of decks){const L=d.leader;if(!L||!d.track||!L.track||d.bend||d._tape||(d.loop&&d.loop.beats<1))continue;
+  const t=d.syncTarget(L);if(Math.abs(t-d.tempo)>1e-6){d.tempo=t;d.setRate();ui[d.id].refresh(true)}
+  if(!d.playing||!L.playing){if(d.nudge){d.nudge=0;d.setRate()}continue}
+  const es=d.phaseErr(L);if(Math.abs(es)>LOCK.realign){d.nudge=0;d.alignPhase(L);continue}
+  const max=d.stOn?LOCK.maxKeyLock:LOCK.maxVinyl,n=clamp(-es/LOCK.tau,-max,max);if(Math.abs(n-d.nudge)>2e-5){d.nudge=n;d.setRate()}}}
+setInterval(phaseLock,50);
+/* key lock: load the phase-vocoder time-stretch worklet; decks fall back to plain varispeed if it can't load (e.g. file://) */
 let stretchReady=false;
 function attachStretch(d){const n=new AudioWorkletNode(ctx,'mx-stretch',{numberOfInputs:0,numberOfOutputs:1,outputChannelCount:[2]});n.connect(d.trim);d.st=n;
- n.port.onmessage=e=>{const m=e.data;if(!d.src||!d.src.st||d.src.id!==m.id)return;if(m.type==='ended')d.ended();else if(m.type==='pos')d._wpos=m};
+ n.port.onmessage=e=>{const m=e.data;if(!d.src||!d.src.st||d.src.id!==m.id)return;if(m.type==='ended')d.ended();else if(m.type==='pos'&&m.seq===d.stSeq)d._wpos=m};
  n.onprocessorerror=e=>{console.warn('Key-lock worklet failed',e);d.st=null;d.stBuf=null;if(d.src&&d.src.st){d.src=null;d.playing=false;d.play()}ui[d.id].refresh()};d.sendBuf()}
 const stretchP=(ctx.audioWorklet?ctx.audioWorklet.addModule('stretch-worklet.js'):Promise.reject(new Error('AudioWorklet not supported')))
  .then(()=>{decks.forEach(attachStretch);stretchReady=true;decks.forEach(d=>ui[d.id]&&ui[d.id].refresh())})
@@ -130,10 +147,10 @@ function deckHTML(id){return`<div class="dhead"><span class="dot"></span><span c
 <div class="knobwrap"><input type="range" class="knob" data-r="filter" data-midi="${id}.filter" min="-1" max="1" step="0.01" value="0"><label>FILTER</label><button class="kill" data-a="vockill" title="Vocal kill: cuts the mid band">VOX ✕</button></div></div></div>
 <div class="tempo"><span>TEMPO</span><span data-r="tempoTxt">0.0%</span><input type="range" class="v" data-r="tempo" data-midi="${id}.tempo" min="-0.16" max="0.16" step="0.0005" value="0"><span>±16%</span><div><button data-bend="-1" class="kill">−</button><button data-bend="1" class="kill">+</button></div><button data-a="keylock" class="kill klock" data-midi="${id}.keylock" title="Key lock (master tempo): change tempo without changing pitch">KEY<br>LOCK</button></div></div>`}
 function buildDeckUI(d){const el=$('#deck'+d.id);el.innerHTML=deckHTML(d.id);const r=n=>el.querySelector(`[data-r="${n}"]`);
- const u={el,r,refresh(soft){const t=d.track;r('title').textContent=t?t.name:'No track loaded';r('bpm').textContent=t?d.bpm.toFixed(1):'---';r('rate').textContent='×'+d.rate.toFixed(3);
+ const u={el,r,refresh(soft){const t=d.track;r('title').textContent=t?t.name:'No track loaded';r('bpm').textContent=t?d.bpm.toFixed(1):'---';r('rate').textContent='×'+d.baseRate.toFixed(3);
    r('key').textContent=t?t.a.key:'--';r('keyname').textContent=t?t.a.keyName:'';r('energy').textContent=t?Math.round(t.a.energy*10)+'/10':'--';r('entry').textContent=t?fmt(t.a.entry):'--';
    r('tempoTxt').textContent=(d.tempo*100).toFixed(1)+'%';const ts=r('tempo');if(Math.abs(ts.value-d.tempo)>1e-4){ts.min=Math.min(-0.16,d.tempo);ts.max=Math.max(0.16,d.tempo);ts.value=d.tempo}
-   if(soft)return;el.querySelector('[data-a="play"]').classList.toggle('on',d.playing);
+   if(soft)return;el.querySelector('[data-a="play"]').classList.toggle('on',d.playing);el.querySelector('[data-a="sync"]').classList.toggle('on',!!d.leader);
    el.querySelectorAll('[data-cue]').forEach(b=>b.classList.toggle('set',!!(t&&t.cues[b.dataset.cue]!=null)));
    el.querySelectorAll('[data-loop]').forEach(b=>b.classList.toggle('on',!!(d.loop&&+b.dataset.loop===d.loop.beats)));
    el.querySelectorAll('[data-kill]').forEach(b=>b.classList.toggle('on',d.kills[b.dataset.kill]));el.querySelector('[data-a="vockill"]').classList.toggle('on',d.kills.mid);
@@ -148,7 +165,7 @@ function buildDeckUI(d){const el=$('#deck'+d.id);el.innerHTML=deckHTML(d.id);con
  let lp;el.addEventListener('pointerdown',e=>{const b=e.target.closest('[data-cue]');if(b)lp=setTimeout(()=>{d.hotCue(+b.dataset.cue,true);lp='done'},700);
   const bd=e.target.closest('[data-bend]');if(bd){d.bend=.04*bd.dataset.bend;d.setRate()}});
  el.addEventListener('pointerup',e=>{if(lp&&lp!=='done')clearTimeout(lp);if(lp==='done'){e.preventDefault()}lp=null;if(d.bend){d.bend=0;d.setRate()}});
- el.addEventListener('input',e=>{const t=e.target;if(t.dataset.eq)d.setEQ(t.dataset.eq,+t.value);else if(t.dataset.r==='filter')d.setFilter(+t.value);else if(t.dataset.r==='tempo')d.setTempo(+t.value)});
+ el.addEventListener('input',e=>{const t=e.target;if(t.dataset.eq)d.setEQ(t.dataset.eq,+t.value);else if(t.dataset.r==='filter')d.setFilter(+t.value);else if(t.dataset.r==='tempo'){if(d.leader){d.leader=null;d.nudge=0;u.refresh()}d.setTempo(+t.value)}});
  const seekCanvas=(cv,zoom)=>cv.addEventListener('click',e=>{if(!d.buf)return;const rc=cv.getBoundingClientRect();const x=(e.clientX-rc.left)/rc.width;
   if(zoom){d.seek(d.pos()+(x-.5)*8)}else d.seek(x*d.buf.duration)});seekCanvas(r('wave'),true);seekCanvas(r('over'),false);
  el.addEventListener('dragover',e=>e.preventDefault());el.addEventListener('drop',e=>{e.preventDefault();const id=e.dataTransfer.getData('text/track');const t=state.tracks.find(x=>x.id===id);if(t)d.load(t)});
@@ -190,7 +207,7 @@ function fxToggle(name,on){const {fx,deck}=fxUnit();const mix=+$('#fxMix').value
  if(name==='echo'){fx.dl.delayTime.value=clamp(anyDeck.track?60/anyDeck.bpm*.75:.35,.05,3.9);fx.echoS.gain.setTargetAtTime(on?mix:0,t,.02)}
  else if(name==='reverb')fx.revS.gain.setTargetAtTime(on?mix*1.4:0,t,.05);else if(name==='flanger')fx.flS.gain.setTargetAtTime(on?mix:0,t,.02);
  else if(name==='stutter'){const ds=deck?[deck]:decks.filter(d=>d.playing);ds.forEach(d=>{if(on){d._preLoop=d.loop;d.setLoop(.25)}else{d.exitLoop();if(d._preLoop)d.setLoop(d._preLoop.beats)}})}
- else if(name==='tapestop'&&on){const ds=deck?[deck]:decks.filter(d=>d.playing);ds.forEach(d=>{if(!d.src)return;const s=d.src,p0=d.pos(),r=d.rate;if(s.st)d.stMsg({type:'tape',dur:1.1});else{s.playbackRate.cancelScheduledValues(t);s.playbackRate.setValueAtTime(r,t);s.playbackRate.linearRampToValueAtTime(.01,t+1.1)}
+ else if(name==='tapestop'&&on){const ds=deck?[deck]:decks.filter(d=>d.playing);ds.forEach(d=>{if(!d.src)return;const s=d.src,p0=d.pos(),r=d.rate;d._tape=true;setTimeout(()=>{d._tape=false},1200);if(s.st)d.stMsg({type:'tape',dur:1.1});else{s.playbackRate.cancelScheduledValues(t);s.playbackRate.setValueAtTime(r,t);s.playbackRate.linearRampToValueAtTime(.01,t+1.1)}
    setTimeout(()=>{if(d.src===s){d.stop();d.startPos=p0+r*.55;ui[d.id].refresh()}},1100)});setTimeout(()=>{fxState.tapestop=false;$('[data-fx=tapestop]').classList.remove('on')},1150)}}
 $$('.fxb').forEach(b=>{const n=b.dataset.fx;b.dataset.midi='fx.'+n;
  if(n==='stutter'){b.addEventListener('pointerdown',()=>{b.classList.add('on');fxToggle(n,true)});const off=()=>{if(b.classList.contains('on')){b.classList.remove('on');fxToggle(n,false)}};b.addEventListener('pointerup',off);b.addEventListener('pointerleave',off);b.addEventListener('click',e=>{if(e.detail===0){fxToggle(n,true);setTimeout(()=>fxToggle(n,false),500)}})}

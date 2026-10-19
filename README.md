@@ -8,8 +8,8 @@
 A two-deck DJ app that runs in the browser. Drop in your own music files and it works out each track's BPM, key, energy and best entry point. It then beatmatches and auto-mixes your set, including mid-song blends. Everything is plain HTML/CSS/JS on the Web Audio API, with no build step and no dependencies. Your music is analysed on your device and never uploaded.
 
 ## Features
-- Two decks with waveforms, cue, sync, 8 hot cues, beat loops, 3-band EQ with kills, a filter sweep and a vocal cut
-- **Key lock (master tempo)** on by default, so tempo changes don't change the pitch (WSOLA time-stretch in an AudioWorklet)
+- Two decks with waveforms, cue, sync with continuous beat-phase lock, 8 hot cues, beat loops, 3-band EQ with kills, a filter sweep and a vocal cut
+- **Key lock (master tempo)** on by default, so tempo changes don't change the pitch (phase-vocoder time-stretch in an AudioWorklet)
 - **Auto-Mix** that orders tracks by key, BPM and an editable energy curve, then mixes them with beatmatched transitions
 - FX: echo, reverb, flanger, stutter and tape stop. Soundboard pads, including your own clips
 - Mic input with auto-ducking, set recording (WebM/Opus), and a full-screen visuals mode
@@ -36,7 +36,7 @@ Q/P play deck A/B · W/O cue · 1–4 sound pads · Shift-click, right-click or 
 
 ## Limitations
 - Streaming services don't allow their audio to be mixed in third-party apps. The Spotify import only matches pasted track names to your own files.
-- Key lock needs http/https (it doesn't work from `file://`). WSOLA can shift transients by up to ±10 ms, and big tempo changes (more than ~10%) can sound slightly phasey. Turn KEY LOCK off for vinyl-style pitch.
+- Key lock needs http/https (it doesn't work from `file://`). It uses a phase vocoder, so very sharp transients get slightly softer at big tempo changes (more than ~10%). Turn KEY LOCK off for vinyl-style pitch.
 - BPM and key are estimates. They work best on steady 4/4 dance music between 75 and 175 BPM.
 - Vocal and bass kills are EQ-based, not true stem separation.
 - The `server.js` queue is in memory and resets when the server restarts.

@@ -1,4 +1,4 @@
-const CACHE='mixrrrr-live-v4';
+const CACHE='mixrrrr-live-v5';
 const ASSETS=['./','./index.html','./style.css','./app.js','./analysis.js','./logo.svg','./icons/icon.svg','./manifest.webmanifest','./request.html','./qrcode.js','./config.js','./stretch-worklet.js'];
 self.addEventListener('install',e=>{e.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS)).then(()=>self.skipWaiting()))});
 self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(k=>Promise.all(k.filter(x=>x!==CACHE).map(x=>caches.delete(x)))).then(()=>self.clients.claim()))});
