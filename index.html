@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Mixrrrr Live – AI DJ</title><meta name="theme-color" content="#0d0716">
+<link rel="manifest" href="manifest.webmanifest"><link rel="icon" href="icons/icon.svg"><link rel="stylesheet" href="style.css">
+</head><body>
+<div id="app">
+<header class="top">
+  <img src="logo.svg" class="logo" alt="Mixrrrr Live">
+  <section class="panel energy"><div class="ptitle">Energy Curve <small>drag to shape · auto-mix follows it</small></div>
+    <canvas id="energyCanvas" height="70"></canvas>
+    <div class="energy-presets"><button data-curve="classic">Warm‑Peak‑Cool</button><button data-curve="build">Build</button><button data-curve="flat">Steady</button><span id="energyNow">–</span></div></section>
+  <div class="top-right">
+    <label class="toggle">Auto‑Mix <input type="checkbox" id="autoMix"><span></span></label>
+    <div class="tools">
+      <button id="btnRec" title="Record set">● REC</button>
+      <button id="btnVisuals" title="Visuals">◎ Visuals</button>
+      <button id="btnSets" title="Saved sets & presets">▤ Sets</button>
+      <button id="btnMidi" title="MIDI controller">⎍ MIDI</button>
+      <button id="btnSpotify" title="Import playlist">♫ Import</button>
+    </div>
+  </div>
+</header>
+<main class="grid">
+  <section class="panel deck" id="deckA"></section>
+  <section class="panel mixer">
+    <div class="ptitle c">Mixer</div>
+    <div class="xf"><span>A</span><input type="range" id="xfader" min="-1" max="1" step="0.01" value="0" class="h"><span>B</span></div>
+    <div class="mixrow">
+      <div class="vol"><div class="meter" id="meterA"><i></i></div><input type="range" orient="vertical" class="v" id="volA" min="0" max="1" step="0.01" value="0.9"><span>A</span></div>
+      <div class="mastercol"><div class="knobwrap"><input type="range" class="knob" id="master" min="0" max="1" step="0.01" value="0.9"><label>MASTER</label></div><div class="meter wide" id="meterM"><i></i></div><div class="bpmMaster" id="masterBpm">--- BPM</div></div>
+      <div class="vol"><div class="meter" id="meterB"><i></i></div><input type="range" orient="vertical" class="v" id="volB" min="0" max="1" step="0.01" value="0.9"><span>B</span></div>
+    </div>
+    <div class="fx"><div class="ptitle c sm">FX Slot <select id="fxTarget"><option value="master">Master</option><option value="A">Deck A</option><option value="B">Deck B</option></select></div>
+      <div class="fxgrid">
+        <button class="fxb" data-fx="echo">Echo</button><button class="fxb" data-fx="reverb">Reverb</button>
+        <button class="fxb" data-fx="flanger">Flanger</button><button class="fxb" data-fx="stutter">Stutter</button>
+        <button class="fxb" data-fx="tapestop">Tape Stop</button><div class="knobwrap sm"><input type="range" class="knob" id="fxMix" min="0" max="1" step="0.01" value="0.5"><label>FX MIX</label></div>
+      </div></div>
+  </section>
+  <section class="panel deck" id="deckB"></section>
+
+  <section class="panel soundboard"><div class="ptitle">Soundboard</div>
+    <div class="pads" id="pads"></div></section>
+  <section class="panel mic"><div class="ptitle c">Mic</div>
+    <button id="micBtn" class="micbtn"><svg viewBox="0 0 24 24"><path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.9V21h2v-3.1A7 7 0 0 0 19 11z" fill="currentColor"/></svg><span id="micState">OFF</span></button>
+    <div class="meter wide" id="meterMic"><i></i></div>
+    <label class="chk"><input type="checkbox" id="duckOn" checked> Auto‑duck</label>
+    <div class="knobwrap sm"><input type="range" class="knob" id="micVol" min="0" max="1.5" step="0.01" value="1"><label>MIC</label></div>
+  </section>
+  <section class="panel requests"><div class="ptitle">Song Request Queue <span class="pill" id="reqCount">0</span></div>
+    <ul id="reqList"></ul>
+    <form id="reqForm"><input id="reqInput" placeholder="Add a request…"><button>+</button></form>
+    <div class="qrrow noqr"><canvas id="qr" width="96" height="96" hidden></canvas><div><b id="qrTitle">Online requests coming soon</b><p id="qrText">For now the queue lives on this device.</p></div></div>
+  </section>
+
+  <section class="panel library">
+    <div class="libhead"><div class="ptitle">Track Library <span id="libCount" class="pill">0</span></div>
+      <input id="search" placeholder="Search tracks…">
+      <label class="addbtn">+ Add Tracks<input type="file" id="fileIn" accept="audio/*" multiple hidden></label></div>
+    <div class="drop" id="drop">Drag &amp; drop audio files here (MP3, WAV, M4A, OGG, FLAC) — analysed locally, nothing uploaded</div>
+    <div class="tablewrap"><table><thead><tr><th>#</th><th>Title</th><th>BPM</th><th>Key</th><th>Energy</th><th>Time</th><th>Load</th></tr></thead><tbody id="libBody"></tbody></table></div>
+  </section>
+</main>
+<footer id="status">Ready. Add music to start.</footer>
+</div>
+
+<div id="visuals" hidden><canvas id="visCanvas"></canvas><button id="visClose">✕</button><img src="logo.svg" class="vislogo" alt=""></div>
+<dialog id="dlg"><form method="dialog"><div id="dlgBody"></div><menu><button value="close">Close</button></menu></form></dialog>
+<script src="config.js"></script><script src="qrcode.js"></script><script src="analysis.js"></script><script src="app.js"></script>
+</body></html>

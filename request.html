@@ -1,0 +1,10 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Request a song · Mixrrrr Live</title><link rel="icon" href="icons/icon.svg">
+<style>body{margin:0;font-family:system-ui,sans-serif;background:#0d0716;color:#eee;display:flex;flex-direction:column;align-items:center;padding:24px}img{width:260px;max-width:90%}
+input,button{font-size:18px;padding:12px;border-radius:12px;border:1px solid #6b4a9a;background:#1a1028;color:#fff;width:100%;box-sizing:border-box;margin:6px 0}button{background:linear-gradient(#a45cff,#6d28d9);font-weight:700}form{width:100%;max-width:420px}#m{color:#c9a7ff;min-height:24px}li{padding:6px 0}</style></head>
+<body><img src="logo.svg" alt="Mixrrrr Live"><h2>Request a song</h2><form id="f"><input id="t" placeholder="Artist – Song" required maxlength="120"><input id="b" placeholder="Your name (optional)" maxlength="40"><button>Send request</button></form><p id="m"></p><ol id="l"></ol>
+<script>
+const SERVER=!!document.querySelector('meta[name="mixrrrr-server"]');// injected by server.js
+if(!SERVER){f.hidden=true;m.textContent='Online song requests are coming soon. For now, tell the DJ in person 🎧';}
+async function load(){try{const r=await fetch('api/requests');const j=await r.json();l.innerHTML='';j.sort((a,b)=>b.votes-a.votes).forEach(x=>{const li=document.createElement('li');li.textContent=x.title+'  ▲'+x.votes;l.appendChild(li)})}catch(e){m.textContent='Request server not running – ask the DJ.'}}
+f.onsubmit=async e=>{e.preventDefault();try{const r=await fetch('api/requests',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:t.value,by:b.value})});m.textContent=r.ok?'Sent! 🎶':'Could not send';t.value='';load()}catch(e){m.textContent='Request server not running.'}};if(SERVER){load();setInterval(load,5000)}
+</script></body></html>

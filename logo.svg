@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 120" role="img" aria-label="Mixrrrr Live">
+<defs>
+<linearGradient id="chrome" x1="0" y1="0" x2="0" y2="1">
+<stop offset="0" stop-color="#ffffff"/><stop offset=".35" stop-color="#c9c9d6"/><stop offset=".5" stop-color="#7d7a8c"/><stop offset=".62" stop-color="#e9e8f2"/><stop offset="1" stop-color="#8d8a9e"/></linearGradient>
+<radialGradient id="vinyl" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#1a0f2b"/><stop offset=".55" stop-color="#120a1f"/><stop offset="1" stop-color="#05020a"/></radialGradient>
+<linearGradient id="neon" x1="0" x2="1"><stop offset="0" stop-color="#b56cff"/><stop offset="1" stop-color="#7b2cff"/></linearGradient>
+<filter id="glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+</defs>
+<g transform="translate(60 60)">
+<circle r="52" fill="url(#vinyl)"/>
+<circle r="49" fill="none" stroke="url(#neon)" stroke-width="4" filter="url(#glow)"/>
+<circle r="40" fill="none" stroke="#2b1a44" stroke-width="1"/><circle r="33" fill="none" stroke="#2b1a44" stroke-width="1"/><circle r="26" fill="none" stroke="#2b1a44" stroke-width="1"/>
+<circle r="9" fill="#9b4dff"/><circle r="2.5" fill="#0d0716"/>
+<path d="M-30 24 V-24 H-18 L0 2 L18 -24 H30 V24 H19 V-6 L0 18 L-19 -6 V24 Z" fill="url(#chrome)" stroke="#f4f2ff" stroke-width="1"/>
+</g>
+<text x="130" y="68" font-family="Orbitron,Montserrat,Segoe UI,Arial,sans-serif" font-weight="800" font-size="44" letter-spacing="2" fill="url(#chrome)">MIXRRRR</text>
+<text x="398" y="68" font-family="Orbitron,Montserrat,Segoe UI,Arial,sans-serif" font-weight="800" font-size="44" letter-spacing="2" fill="url(#neon)" filter="url(#glow)">LIVE</text>
+<text x="132" y="96" font-family="Segoe UI,Arial,sans-serif" font-size="14" letter-spacing="3" fill="#a99cc4">AI DJ · BUILT FOR THE ROOM</text>
+</svg>
